@@ -1,0 +1,67 @@
+# =============================================================
+# NubeSoft (Grupo 06) - Una base aislada por cada pull request
+# - Al abrir / actualizar un PR: crea (o reutiliza) el branch
+#   preview/pr-<número> desde main, aplica la migración y prueba.
+# - Al cerrar el PR (merge o cierre): elimina el branch.
+# Requisitos en el repositorio (Settings > Secrets and variables > Actions):
+#   Secret   NEON_API_KEY     -> API key de Neon
+#   Variable NEON_PROJECT_ID  -> ID del proyecto Neon
+# =============================================================
+name: Neon - base por pull request
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: neon-pr-${{ github.event.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  crear-branch:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Crear branch de Neon para el PR
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch_name: preview/pr-${{ github.event.number }}
+          parent_branch: main
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Aplicar migración del PR en su propia base
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+        run: |
+          START=$(date +%s)
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/03_migracion_pr.sql
+          echo "Migración aplicada en $(( $(date +%s) - START )) s"
+
+      - name: Pruebas / verificación
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/04_verificacion.sql
+
+      - name: Resumen
+        run: |
+          echo "### Base del PR #${{ github.event.number }} lista" >> $GITHUB_STEP_SUMMARY
+          echo "Branch Neon: \`preview/pr-${{ github.event.number }}\` (padre: main)" >> $GITHUB_STEP_SUMMARY
+
+  borrar-branch:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Eliminar branch de Neon del PR
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: preview/pr-${{ github.event.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
