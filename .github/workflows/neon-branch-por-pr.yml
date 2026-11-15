@@ -1,7 +1,7 @@
 # =============================================================
 # NubeSoft (Grupo 06) - Una base aislada por cada pull request
 # - Al abrir / actualizar un PR: crea (o reutiliza) el branch
-#   preview/pr-<número> desde main, aplica la migración y prueba.
+#   preview/pr-<número> desde production, aplica la migración y prueba.
 # - Al cerrar el PR (merge o cierre): elimina el branch.
 # Requisitos en el repositorio (Settings > Secrets and variables > Actions):
 #   Secret   NEON_API_KEY     -> API key de Neon
@@ -34,7 +34,7 @@ jobs:
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch_name: preview/pr-${{ github.event.number }}
-          parent_branch: main
+          parent_branch: production
           api_key: ${{ secrets.NEON_API_KEY }}
 
       - name: Aplicar migración del PR en su propia base
